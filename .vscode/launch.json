@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "Debug via probe-rs",
+            "preLaunchTask": "rust: cargo build",
+            "cwd": "${workspaceFolder}",
+            // RP2040 doesn't support connectUnderReset
+            "connectUnderReset": false,
+            "chip": "rp2040",
+            "runtimeExecutable": "probe-rs",
+            "runtimeArgs": [
+                "dap-server"
+            ],
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "haltAfterReset": false,
+            },
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    "programBinary": "./target/thumbv6m-none-eabi//debug/${workspaceFolderBasename}",
+                    "rttEnabled": true,
+                }
+            ],
+            "consoleLogLevel": "Debug"
+        }
+    ]
+}
