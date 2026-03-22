@@ -4,16 +4,16 @@
 
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_rp::bind_interrupts;
-use embassy_rp::gpio::Output;
+use embassy_rp::gpio::{Output, Pull};
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_rp::pio_programs::ws2812::{Grb, PioWs2812, PioWs2812Program, Rgb};
+use embassy_rp::{adc, bind_interrupts};
 use embassy_time::{Delay, Duration, Instant, Ticker};
 use embedded_hal_async::delay::DelayNs;
-use fixed::types::U16F16;
-use smart_leds::RGB8;
+use fixed::types::U24F8;
 use smart_leds::hsv::{Hsv, hsv2rgb};
+use smart_leds::{RGB8, gamma};
 use {defmt_rtt as _, panic_probe as _};
 
 mod colors;
@@ -22,6 +22,7 @@ use colors::BLACK;
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
+    ADC_IRQ_FIFO => adc::InterruptHandler;
 });
 
 /// Flash the onboard LED at this rate in Hz.
@@ -33,12 +34,10 @@ const NS_PER_60HZ: u32 = 16_666_667;
 
 /// The length of the LED strand on PIN3. (Uses the Grb color format.)
 const STRAND_LEN: usize = 20;
-/// The dimming factor for the LED strand on PIN3.
-const STRAND_DIM: u8 = 1;
 /// The length of the LED strip on PIN2
 const STRIP_LEN: usize = 24;
-/// The dimming factor for the LED strip on PIN2
-const STRIP_DIM: u8 = 8;
+/// The hsv value component for the LED strip on PIN2
+const STRIP_BRIGHTNESS: u8 = 0x1F;
 
 #[embassy_executor::task]
 async fn toggle_led(mut led: Output<'static>, interval: Duration) {
@@ -80,38 +79,81 @@ async fn pin2_led_strip(mut led_strip: PioWs2812<'static, PIO0, 0, STRIP_LEN, Gr
     let mut ticker = Ticker::every(Duration::from_millis(10));
     loop {
         for j in 0..255 {
-            fill(&mut temp_12, j, 3u8.into());
+            let len = temp_12.len();
+            for (i, led) in temp_12.iter_mut().enumerate() {
+                let hue = (i as u16 * 256u16 / len as u16) as u8;
+                let hue = hue.wrapping_add(j);
+                let hsv = Hsv {
+                    hue,
+                    sat: 255,
+                    val: STRIP_BRIGHTNESS,
+                };
+                *led = hsv2rgb(hsv);
+            }
 
             for i in 0..12 {
                 leds[2 * i] = temp_12[i];
                 leds[2 * i + 1] = temp_12[11 - i];
             }
 
-            led_strip.write(&leds.map(|led| led / STRIP_DIM)).await;
+            led_strip.write(&leds).await;
             ticker.next().await;
         }
     }
 }
 
 #[embassy_executor::task]
-async fn pin3_led_strand(mut led_strand: PioWs2812<'static, PIO0, 1, STRAND_LEN, Rgb>) {
+async fn pin3_led_strand(
+    mut led_strand: PioWs2812<'static, PIO0, 1, STRAND_LEN, Rgb>,
+    mut adc: adc::Adc<'static, adc::Async>,
+    mut adc_pin: adc::Channel<'static>,
+) {
     info!(
         "task `led_strand` spawned at {}us",
         Instant::now().as_micros()
     );
     let mut leds = [RGB8::default(); STRAND_LEN];
     let mut ticker = Ticker::every(Duration::from_millis(10));
+    let len = U24F8::from(leds.len() as u16);
+    let mut debounced_scale = 0x7FF;
     loop {
-        for scale in 0x1_FFu16..0x3_FF {
-            let scale = (scale as u32) << 4;
-            let scale = U16F16::from_bits(scale);
-            info!("scale={}", scale);
-            for j in 0..255 {
-                fill(&mut leds, j, scale);
-                led_strand.write(&leds.map(|led| led / STRAND_DIM)).await;
-                ticker.next().await;
+        for j in 0..255 {
+            let scale = adc.read(&mut adc_pin).await.unwrap();
+            if (scale as i16 - debounced_scale as i16).abs() > 8 {
+                debounced_scale = scale;
             }
+            let scale = U24F8::from_bits(u32::from(debounced_scale));
+            if j % 8 == 0 {
+                info!("scale={}", scale);
+            }
+            let len: u16 = (scale * len).to_num();
+            let len = len.clamp(2, 1_000);
+            if j % 8 == 0 {
+                info!("scale={}, len={}", scale, len);
+            }
+
+            let gen_color = gamma(
+                (0..)
+                    .map(|i: u16| {
+                        let hue = ((i * 256u16) / len) as u8;
+                        let hue = hue.wrapping_add(j);
+
+                        Hsv {
+                            hue,
+                            sat: 255,
+                            val: 255,
+                        }
+                    })
+                    .map(hsv2rgb),
+            );
+
+            for (led, color) in leds.iter_mut().zip(gen_color) {
+                *led = color;
+            }
+            led_strand.write(&leds).await;
+            ticker.next().await;
         }
+        // }
     }
 }
 
@@ -128,6 +170,8 @@ async fn main(spawner: Spawner) {
     } = Pio::new(p.PIO0, Irqs);
 
     let led = Output::new(p.PIN_25, embassy_rp::gpio::Level::Low);
+    let adc = adc::Adc::new(p.ADC, Irqs, adc::Config::default());
+    let p26 = adc::Channel::new_pin(p.PIN_26, Pull::None);
 
     info!("Spawning tasks: {}us", Instant::now().as_micros());
     unwrap!(spawner.spawn(toggle_led(led, Duration::from_hz(LED_HZ))));
@@ -149,21 +193,5 @@ async fn main(spawner: Spawner) {
     info!("Finished clearing LEDs: {}us", Instant::now().as_micros());
 
     unwrap!(spawner.spawn(pin2_led_strip(led_strip)));
-    unwrap!(spawner.spawn(pin3_led_strand(led_strand)));
-}
-
-fn fill(data: &mut [RGB8], j: u8, scale: U16F16) {
-    let len = U16F16::from(data.len() as u16);
-    let len = scale * len;
-    let len: u16 = len.to_num();
-    for (i, led) in data.iter_mut().enumerate() {
-        let hue = (i as u16 * 256u16 / len) as u8;
-        let hue = hue.wrapping_add(j);
-        let hsv = Hsv {
-            hue,
-            sat: 255,
-            val: 255,
-        };
-        *led = hsv2rgb(hsv);
-    }
+    unwrap!(spawner.spawn(pin3_led_strand(led_strand, adc, p26)));
 }
