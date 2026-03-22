@@ -455,7 +455,6 @@ dependencies = [
  "embassy-executor",
  "embassy-rp",
  "embassy-time",
- "embedded-hal-async",
  "fixed",
  "panic-probe",
  "smart-leds",
