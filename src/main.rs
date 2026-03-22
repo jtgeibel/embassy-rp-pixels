@@ -4,11 +4,8 @@
 
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_rp::gpio::{Output, Pull};
-use embassy_rp::peripherals::PIO0;
-use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_rp::pio_programs::ws2812::{Grb, PioWs2812, PioWs2812Program, Rgb};
-use embassy_rp::{adc, bind_interrupts};
+use embassy_rp::{adc, bind_interrupts, dma, gpio, peripherals, pio};
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use fixed::types::U24F8;
 use smart_leds::hsv::{Hsv, hsv2rgb};
@@ -20,8 +17,10 @@ mod colors;
 use colors::BLACK;
 
 bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => InterruptHandler<PIO0>;
+    PIO0_IRQ_0 => pio::InterruptHandler<peripherals::PIO0>;
     ADC_IRQ_FIFO => adc::InterruptHandler;
+    DMA_IRQ_0 => dma::InterruptHandler<peripherals::DMA_CH0>,
+        dma::InterruptHandler<peripherals::DMA_CH1>;
 });
 
 /// Flash the onboard LED at this rate in Hz.
@@ -39,7 +38,7 @@ const STRIP_LEN: usize = 24;
 const STRIP_BRIGHTNESS: u8 = 0x1F;
 
 #[embassy_executor::task]
-async fn toggle_led(mut led: Output<'static>, interval: Duration) {
+async fn toggle_led(mut led: gpio::Output<'static>, interval: Duration) {
     info!(
         "task `toggle_led` started in {}us",
         Instant::now().as_micros()
@@ -68,7 +67,7 @@ async fn print_runtime() {
 }
 
 #[embassy_executor::task]
-async fn pin2_led_strip(mut led_strip: PioWs2812<'static, PIO0, 0, STRIP_LEN, Grb>) {
+async fn pin2_led_strip(mut led_strip: PioWs2812<'static, peripherals::PIO0, 0, STRIP_LEN, Grb>) {
     info!(
         "task `led_strip` spawned at {}us",
         Instant::now().as_micros()
@@ -103,7 +102,7 @@ async fn pin2_led_strip(mut led_strip: PioWs2812<'static, PIO0, 0, STRIP_LEN, Gr
 
 #[embassy_executor::task]
 async fn pin3_led_strand(
-    mut led_strand: PioWs2812<'static, PIO0, 1, STRAND_LEN, Rgb>,
+    mut led_strand: PioWs2812<'static, peripherals::PIO0, 1, STRAND_LEN, Rgb>,
     mut adc: adc::Adc<'static, adc::Async>,
     mut adc_pin: adc::Channel<'static>,
 ) {
@@ -156,25 +155,25 @@ async fn main(spawner: Spawner) {
     info!("Booted in {}us", Instant::now().as_micros());
     let p = embassy_rp::init(Default::default());
 
-    let Pio {
+    let pio::Pio {
         mut common,
         sm0,
         sm1,
         ..
-    } = Pio::new(p.PIO0, Irqs);
+    } = pio::Pio::new(p.PIO0, Irqs);
 
-    let led = Output::new(p.PIN_25, embassy_rp::gpio::Level::Low);
+    let led = gpio::Output::new(p.PIN_25, embassy_rp::gpio::Level::Low);
     let adc = adc::Adc::new(p.ADC, Irqs, adc::Config::default());
-    let p26 = adc::Channel::new_pin(p.PIN_26, Pull::None);
+    let p26 = adc::Channel::new_pin(p.PIN_26, gpio::Pull::None);
 
     info!("Spawning tasks: {}us", Instant::now().as_micros());
-    unwrap!(spawner.spawn(toggle_led(led, Duration::from_hz(LED_HZ))));
-    unwrap!(spawner.spawn(print_runtime()));
+    spawner.spawn(unwrap!(toggle_led(led, Duration::from_hz(LED_HZ))));
+    spawner.spawn(unwrap!(print_runtime()));
 
     let program = PioWs2812Program::new(&mut common);
-    let mut led_strip = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_2, &program);
+    let mut led_strip = PioWs2812::new(&mut common, sm0, p.DMA_CH0, Irqs, p.PIN_2, &program);
     let mut led_strand: PioWs2812<_, _, _, Rgb> =
-        PioWs2812::with_color_order(&mut common, sm1, p.DMA_CH1, p.PIN_3, &program);
+        PioWs2812::with_color_order(&mut common, sm1, p.DMA_CH1, Irqs, p.PIN_3, &program);
 
     info!("Started clearing LEDs: {}us", Instant::now().as_micros());
     let start = Instant::now();
@@ -186,6 +185,6 @@ async fn main(spawner: Spawner) {
     info!("Took {}us to clear 20 LEDs", (end - middle).as_micros());
     info!("Finished clearing LEDs: {}us", Instant::now().as_micros());
 
-    unwrap!(spawner.spawn(pin2_led_strip(led_strip)));
-    unwrap!(spawner.spawn(pin3_led_strand(led_strand, adc, p26)));
+    spawner.spawn(unwrap!(pin2_led_strip(led_strip)));
+    spawner.spawn(unwrap!(pin3_led_strand(led_strand, adc, p26)));
 }
