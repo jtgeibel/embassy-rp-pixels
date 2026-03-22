@@ -9,8 +9,7 @@ use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_rp::pio_programs::ws2812::{Grb, PioWs2812, PioWs2812Program, Rgb};
 use embassy_rp::{adc, bind_interrupts};
-use embassy_time::{Delay, Duration, Instant, Ticker};
-use embedded_hal_async::delay::DelayNs;
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use fixed::types::U24F8;
 use smart_leds::hsv::{Hsv, hsv2rgb};
 use smart_leds::{RGB8, gamma};
@@ -30,7 +29,7 @@ bind_interrupts!(struct Irqs {
 /// Each flash lasts for [`NS_PER_60HZ`].
 const LED_HZ: u64 = 1;
 /// The number of nanoseconds in one interval of a 60Hz signal.
-const NS_PER_60HZ: u32 = 16_666_667;
+const NS_PER_60HZ: u64 = 16_666_667;
 
 /// The length of the LED strand on PIN3. (Uses the Grb color format.)
 const STRAND_LEN: usize = 20;
@@ -48,7 +47,7 @@ async fn toggle_led(mut led: Output<'static>, interval: Duration) {
     let mut ticker = Ticker::every(interval);
     loop {
         led.set_high();
-        Delay.delay_ns(NS_PER_60HZ).await;
+        Timer::after_nanos(NS_PER_60HZ).await;
         led.set_low();
         ticker.next().await;
     }
@@ -135,7 +134,7 @@ async fn pin3_led_strand(
                         let hue = hue.to_num::<u32>() as u8;
                         Hsv {
                             hue,
-                            sat: 255,
+                            sat: 255 - 64,
                             val: 255,
                         }
                     })
