@@ -11,9 +11,6 @@
             "connectUnderReset": false,
             "chip": "rp2040",
             "runtimeExecutable": "probe-rs",
-            "runtimeArgs": [
-                "dap-server"
-            ],
             "flashingConfig": {
                 "flashingEnabled": true,
                 "haltAfterReset": false,
@@ -21,11 +18,17 @@
             "coreConfigs": [
                 {
                     "coreIndex": 0,
-                    "programBinary": "./target/thumbv6m-none-eabi//debug/${workspaceFolderBasename}",
+                    "programBinary": "./target/thumbv6m-none-eabi/debug/${workspaceFolderBasename}",
                     "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            "dataFormat": "Defmt",
+                            "showLocation": true,
+                        }
+                    ]
                 }
             ],
-            "consoleLogLevel": "Debug"
         }
     ]
 }
