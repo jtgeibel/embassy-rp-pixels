@@ -114,30 +114,25 @@ async fn pin3_led_strand(
     );
     let mut leds = [RGB8::default(); STRAND_LEN];
     let mut ticker = Ticker::every(Duration::from_millis(10));
-    let len = U24F8::from(leds.len() as u16);
-    let mut debounced_scale = 0x7FF;
+    let mut debounced_step = 0x7FF;
     loop {
-        for j in 0..255 {
-            let scale = adc.read(&mut adc_pin).await.unwrap();
-            if (scale as i16 - debounced_scale as i16).abs() > 8 {
-                debounced_scale = scale;
+        for j in 0u8..255 {
+            let step = adc.read(&mut adc_pin).await.unwrap();
+            if (step as i32 - debounced_step).abs() > 32 {
+                debounced_step = step as i32;
             }
-            let scale = U24F8::from_bits(u32::from(debounced_scale));
+            let step = U24F8::from_bits((debounced_step as u32) << 4);
             if j % 8 == 0 {
-                info!("scale={}", scale);
+                info!("step={}", step);
             }
-            let len: u16 = (scale * len).to_num();
-            let len = len.clamp(2, 1_000);
-            if j % 8 == 0 {
-                info!("scale={}, len={}", scale, len);
-            }
+            let j = U24F8::from(j);
 
             let gen_color = gamma(
                 (0..)
                     .map(|i: u16| {
-                        let hue = ((i * 256u16) / len) as u8;
-                        let hue = hue.wrapping_add(j);
-
+                        let i = U24F8::from(i);
+                        let hue = (i * step).wrapping_add(j);
+                        let hue = hue.to_num::<u32>() as u8;
                         Hsv {
                             hue,
                             sat: 255,
