@@ -112,7 +112,7 @@ async fn pin3_led_strand(
     loop {
         for j in 0u8..255 {
             let step = adc.read(&mut adc_pin).await.unwrap();
-            if (step as i32 - debounced_step).abs() > 32 {
+            if (step as i32 - debounced_step).abs() > 48 {
                 debounced_step = step as i32;
             }
             let step = U24F8::from_bits((debounced_step as u32) << 4);
