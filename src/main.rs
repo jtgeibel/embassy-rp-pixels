@@ -12,10 +12,6 @@ use smart_leds::hsv::{Hsv, hsv2rgb};
 use smart_leds::{RGB8, gamma};
 use {defmt_rtt as _, panic_probe as _};
 
-mod colors;
-
-use colors::BLACK;
-
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => pio::InterruptHandler<peripherals::PIO0>;
     ADC_IRQ_FIFO => adc::InterruptHandler;
@@ -177,10 +173,10 @@ async fn main(spawner: Spawner) {
 
     info!("Started clearing LEDs: {}us", Instant::now().as_micros());
     let start = Instant::now();
-    led_strip.write(&[BLACK; STRIP_LEN]).await;
+    led_strip.write(&[RGB8::default(); STRIP_LEN]).await;
     let middle = Instant::now();
     info!("Took {}us to clear 24 LEDs", (middle - start).as_micros());
-    led_strand.write(&[BLACK; STRAND_LEN]).await;
+    led_strand.write(&[RGB8::default(); STRAND_LEN]).await;
     let end = Instant::now();
     info!("Took {}us to clear 20 LEDs", (end - middle).as_micros());
     info!("Finished clearing LEDs: {}us", Instant::now().as_micros());
