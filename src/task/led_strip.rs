@@ -5,7 +5,7 @@ use embassy_rp::{
 };
 use embassy_time::{Duration, Instant, Ticker};
 use smart_leds::{
-    RGB8, //gamma,
+    RGB8, gamma,
     hsv::{Hsv, hsv2rgb},
 };
 
@@ -25,15 +25,22 @@ pub(crate) async fn pin2_led_strip(
     loop {
         for j in 0..255 {
             let len = temp_12.len();
-            for (i, led) in temp_12.iter_mut().enumerate() {
-                let hue = (i as u16 * 256u16 / len as u16) as u8;
-                let hue = hue.wrapping_add(j);
-                let hsv = Hsv {
-                    hue,
-                    sat: 255,
-                    val: STRIP_BRIGHTNESS,
-                };
-                *led = hsv2rgb(hsv);
+            let gen_color = gamma(
+                (0..)
+                    .map(|i| {
+                        let hue = (i as u16 * 256u16 / len as u16) as u8;
+                        let hue = hue.wrapping_add(j);
+                        Hsv {
+                            hue,
+                            sat: 255,//j.clamp(0xAF, 0xFF),
+                            val: STRIP_BRIGHTNESS,
+                        }
+                    })
+                    .map(hsv2rgb),
+            );
+
+            for (temp, color) in temp_12.iter_mut().zip(gen_color) {
+                *temp = color;
             }
 
             for i in 0..12 {

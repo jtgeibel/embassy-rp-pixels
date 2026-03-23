@@ -29,7 +29,7 @@ const STRAND_LEN: usize = 20;
 /// The length of the LED strip on PIN2
 const STRIP_LEN: usize = 24;
 /// The hsv value component for the LED strip on PIN2
-const STRIP_BRIGHTNESS: u8 = 0x1F;
+const STRIP_BRIGHTNESS: u8 = 0x7F;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
