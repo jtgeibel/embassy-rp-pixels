@@ -24,11 +24,11 @@ bind_interrupts!(struct Irqs {
     UART0_IRQ => uart::InterruptHandler<peripherals::UART0>;
 });
 
-/// The length of the LED strand on PIN3. (Uses the Grb color format.)
+/// The length of the LED strand on PIN17. (Uses the Grb color format.)
 const STRAND_LEN: usize = 20;
-/// The length of the LED strip on PIN2
+/// The length of the LED strip on PIN16
 const STRIP_LEN: usize = 24;
-/// The hsv value component for the LED strip on PIN2
+/// The hsv value component for the LED strip on PIN16
 const STRIP_BRIGHTNESS: u8 = 0x7F;
 
 #[embassy_executor::main]
@@ -62,9 +62,9 @@ async fn main(spawner: Spawner) {
     spawner.spawn(unwrap!(uart_terminal(uart0)));
 
     let program = PioWs2812Program::new(&mut common);
-    let mut led_strip = PioWs2812::new(&mut common, sm0, p.DMA_CH0, Irqs, p.PIN_2, &program);
+    let mut led_strip = PioWs2812::new(&mut common, sm0, p.DMA_CH0, Irqs, p.PIN_16, &program);
     let mut led_strand: PioWs2812<_, _, _, Rgb> =
-        PioWs2812::with_color_order(&mut common, sm1, p.DMA_CH1, Irqs, p.PIN_3, &program);
+        PioWs2812::with_color_order(&mut common, sm1, p.DMA_CH1, Irqs, p.PIN_17, &program);
 
     info!("Started clearing LEDs: {}us", Instant::now().as_micros());
     let start = Instant::now();
@@ -76,6 +76,6 @@ async fn main(spawner: Spawner) {
     info!("Took {}us to clear 20 LEDs", (end - middle).as_micros());
     info!("Finished clearing LEDs: {}us", Instant::now().as_micros());
 
-    spawner.spawn(unwrap!(pin2_led_strip(led_strip)));
-    spawner.spawn(unwrap!(pin3_led_strand(led_strand, adc, p26)));
+    spawner.spawn(unwrap!(pin16_led_strip(led_strip)));
+    spawner.spawn(unwrap!(pin17_led_strand(led_strand, adc, p26)));
 }

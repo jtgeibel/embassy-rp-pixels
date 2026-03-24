@@ -13,7 +13,7 @@ use smart_leds::{
 use crate::STRAND_LEN;
 
 #[embassy_executor::task]
-pub(crate) async fn pin3_led_strand(
+pub(crate) async fn pin17_led_strand(
     mut led_strand: PioWs2812<'static, peripherals::PIO0, 1, STRAND_LEN, Rgb>,
     mut adc: adc::Adc<'static, adc::Async>,
     mut adc_pin: adc::Channel<'static>,

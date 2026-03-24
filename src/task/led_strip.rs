@@ -12,7 +12,7 @@ use smart_leds::{
 use crate::{STRIP_BRIGHTNESS, STRIP_LEN};
 
 #[embassy_executor::task]
-pub(crate) async fn pin2_led_strip(
+pub(crate) async fn pin16_led_strip(
     mut led_strip: PioWs2812<'static, peripherals::PIO0, 0, STRIP_LEN, Grb>,
 ) {
     info!(
@@ -32,7 +32,7 @@ pub(crate) async fn pin2_led_strip(
                         let hue = hue.wrapping_add(j);
                         Hsv {
                             hue,
-                            sat: 255,//j.clamp(0xAF, 0xFF),
+                            sat: 255, //j.clamp(0xAF, 0xFF),
                             val: STRIP_BRIGHTNESS,
                         }
                     })
