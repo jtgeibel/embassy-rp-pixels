@@ -12,6 +12,8 @@ use smart_leds::{
 
 use crate::STRAND_LEN;
 
+const REFRESH_RATE: Duration = Duration::from_hz(100);
+
 #[embassy_executor::task]
 pub(crate) async fn pin17_led_strand(
     mut led_strand: PioWs2812<'static, peripherals::PIO0, 1, STRAND_LEN, Rgb>,
@@ -23,7 +25,7 @@ pub(crate) async fn pin17_led_strand(
         Instant::now().as_micros()
     );
     let mut leds = [RGB8::default(); STRAND_LEN];
-    let mut ticker = Ticker::every(Duration::from_millis(10));
+    let mut ticker = Ticker::every(REFRESH_RATE);
     let mut debounced_shift = 0x7FF;
     loop {
         for j in 0u8..255 {
