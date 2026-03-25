@@ -4,6 +4,7 @@ use embassy_rp::{
     pio_programs::ws2812::{Grb, PioWs2812},
 };
 use embassy_time::{Duration, Instant, Ticker};
+use infrared::remotecontrol::Action;
 use smart_leds::{
     RGB8, gamma,
     hsv::{Hsv, hsv2rgb},
@@ -21,22 +22,36 @@ pub(crate) async fn pin16_led_strip(
         "task `led_strip` spawned at {}us",
         Instant::now().as_micros()
     );
+
+    let mut subscriber = crate::IR_PUBSUB_CHANNEL.subscriber().unwrap();
+
     let mut leds = [RGB8::default(); STRIP_LEN];
     let mut temp_12 = [RGB8::default(); STRIP_LEN / 2];
     let mut ticker = Ticker::every(REFRESH_RATE);
+    let mut val = STRIP_BRIGHTNESS;
+    let mut sat = 255u8;
     loop {
         for j in 0..255 {
+            if let Some(action) = subscriber.try_next_message_pure() {
+                match action {
+                    Action::Plus => val = val.saturating_add(4),
+                    Action::Minus => val = val.saturating_sub(4),
+                    Action::Next => sat = sat.saturating_add(4),
+                    Action::Prev => sat = sat.saturating_sub(4),
+                    Action::Power => {
+                        val = 0;
+                        sat = 255;
+                    }
+                    _ => (),
+                }
+            }
             let len = temp_12.len();
             let gen_color = gamma(
                 (0..)
                     .map(|i| {
                         let hue = (i as u16 * 256u16 / len as u16) as u8;
                         let hue = hue.wrapping_add(j);
-                        Hsv {
-                            hue,
-                            sat: 255, //j.clamp(0xAF, 0xFF),
-                            val: STRIP_BRIGHTNESS,
-                        }
+                        Hsv { hue, sat, val }
                     })
                     .map(hsv2rgb),
             );

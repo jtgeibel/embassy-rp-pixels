@@ -17,6 +17,8 @@ pub(crate) async fn infrared_remote(
         Instant::now().as_micros()
     );
 
+    let publisher = crate::IR_PUBSUB_CHANNEL.publisher().unwrap();
+
     loop {
         // FIXME: Must be run in release mode for this to work. Move into an interrupt handler.
         ir_receiver.pin_mut().wait_for_any_edge().await;
@@ -24,7 +26,8 @@ pub(crate) async fn infrared_remote(
         let now = Instant::now().as_micros();
         if let Ok(Some(cmd)) = ir_receiver.event_instant(now) {
             if let Some(action) = cmd.action() {
-                info!("ir command: {}", action.to_str())
+                info!("ir command: {}", action.to_str());
+                publisher.publish_immediate(action);
             } else {
                 info!("ir command: action is None")
             }

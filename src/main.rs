@@ -6,6 +6,8 @@ use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::pio_programs::ws2812::{PioWs2812, PioWs2812Program, Rgb};
 use embassy_rp::{adc, bind_interrupts, dma, gpio, peripherals, pio, uart};
+use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex};
+use embassy_sync::pubsub;
 use embassy_time::Instant;
 use smart_leds::RGB8;
 use {defmt_rtt as _, panic_probe as _};
@@ -30,6 +32,14 @@ const STRAND_LEN: usize = 20;
 const STRIP_LEN: usize = 24;
 /// The hsv value component for the LED strip on PIN16
 const STRIP_BRIGHTNESS: u8 = 0x7F;
+
+static IR_PUBSUB_CHANNEL: pubsub::PubSubChannel<
+    CriticalSectionRawMutex,
+    infrared::remotecontrol::Action,
+    4,
+    2,
+    1,
+> = pubsub::PubSubChannel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
