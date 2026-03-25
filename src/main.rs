@@ -57,9 +57,18 @@ async fn main(spawner: Spawner) {
         uart::Config::default(),
     );
 
+    let p22 = gpio::Input::new(p.PIN_22, gpio::Pull::None);
+    let ir_receiver = infrared::receiver::Receiver::builder()
+        .nec()
+        .remotecontrol(infrared::remotecontrol::nec::SpecialForMp3)
+        .pin(p22)
+        .monotonic::<u64>()
+        .build();
+
     info!("Spawning tasks: {}us", Instant::now().as_micros());
     spawner.spawn(unwrap!(blink_led(led)));
     spawner.spawn(unwrap!(uart_terminal(uart0)));
+    spawner.spawn(unwrap!(infrared_remote(ir_receiver)));
 
     let program = PioWs2812Program::new(&mut common);
     let mut led_strip = PioWs2812::new(&mut common, sm0, p.DMA_CH0, Irqs, p.PIN_16, &program);

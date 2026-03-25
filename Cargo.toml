@@ -11,5 +11,6 @@ embassy-executor = { version = "0.10", features = ["defmt", "executor-thread", "
 embassy-rp = { version = "0.10", features = ["rp2040", "defmt", "boot2-w25q080", "time-driver", "critical-section-impl", "intrinsics"] }
 embassy-time = "0.5.0"
 fixed = { version = "1.31.0", features = ["defmt"] }
+infrared = { version = "0.14.2", default-features = false, features = ["defmt", "embedded", "embedded-hal", "nec", "remotes"] }
 panic-probe = { version = "1.0.0", features = ["defmt"] }
 smart-leds = "0.4.0"
