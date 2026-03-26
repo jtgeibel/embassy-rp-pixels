@@ -4,9 +4,10 @@
 
 use defmt::*;
 use embassy_executor::Spawner;
+use embassy_rp::pio_programs::rotary_encoder::{PioEncoder, PioEncoderProgram};
 use embassy_rp::pio_programs::ws2812::{PioWs2812, PioWs2812Program, Rgb};
 use embassy_rp::{adc, bind_interrupts, dma, gpio, peripherals, pio, uart};
-use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pubsub;
 use embassy_time::Instant;
 use smart_leds::RGB8;
@@ -47,9 +48,10 @@ async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
 
     let pio::Pio {
-        mut common,
+        common: mut pio0,
         sm0,
         sm1,
+        sm2,
         ..
     } = pio::Pio::new(p.PIO0, Irqs);
 
@@ -80,10 +82,13 @@ async fn main(spawner: Spawner) {
     spawner.spawn(unwrap!(uart_terminal(uart0)));
     spawner.spawn(unwrap!(infrared_remote(ir_receiver)));
 
-    let program = PioWs2812Program::new(&mut common);
-    let mut led_strip = PioWs2812::new(&mut common, sm0, p.DMA_CH0, Irqs, p.PIN_16, &program);
+    let ws2812_prog = PioWs2812Program::new(&mut pio0);
+    let mut led_strip = PioWs2812::new(&mut pio0, sm0, p.DMA_CH0, Irqs, p.PIN_16, &ws2812_prog);
     let mut led_strand: PioWs2812<_, _, _, Rgb> =
-        PioWs2812::with_color_order(&mut common, sm1, p.DMA_CH1, Irqs, p.PIN_17, &program);
+        PioWs2812::with_color_order(&mut pio0, sm1, p.DMA_CH1, Irqs, p.PIN_17, &ws2812_prog);
+
+    let encoder_prog = PioEncoderProgram::new(&mut pio0);
+    let encoder = PioEncoder::new(&mut pio0, sm2, p.PIN_19, p.PIN_20, &encoder_prog);
 
     info!("Started clearing LEDs: {}us", Instant::now().as_micros());
     let start = Instant::now();
@@ -96,5 +101,5 @@ async fn main(spawner: Spawner) {
     info!("Finished clearing LEDs: {}us", Instant::now().as_micros());
 
     spawner.spawn(unwrap!(pin16_led_strip(led_strip)));
-    spawner.spawn(unwrap!(pin17_led_strand(led_strand, adc, p26)));
+    spawner.spawn(unwrap!(pin17_led_strand(led_strand, adc, p26, encoder)));
 }
