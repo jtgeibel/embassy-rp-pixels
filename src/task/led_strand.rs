@@ -14,7 +14,6 @@ use smart_leds::{
 use crate::STRAND_LEN;
 
 const REFRESH_RATE: Duration = Duration::from_hz(100);
-const ENCODER_DELTA: u8 = 4;
 
 #[embassy_executor::task]
 pub(crate) async fn pin17_led_strand(
@@ -33,12 +32,7 @@ pub(crate) async fn pin17_led_strand(
     let mut j = 0u8;
     loop {
         match select(encoder.read(), ticker.next()).await {
-            Either::First(Direction::Clockwise) => {
-                shift = shift.saturating_add(ENCODER_DELTA);
-            }
-            Either::First(Direction::CounterClockwise) => {
-                shift = shift.saturating_sub(ENCODER_DELTA);
-            }
+            Either::First(direction) => update_phase_shift(&mut shift, direction),
             Either::Second(_) => {
                 let sat = adc.read(&mut adc_pin).await.unwrap();
                 let sat = (sat >> 4) as u8;
@@ -65,4 +59,22 @@ fn render(leds: &mut [RGB8; STRAND_LEN], shift: u8, j: u8, sat: u8) {
     for (led, color) in leds.iter_mut().zip(gen_color) {
         *led = color;
     }
+}
+
+fn update_phase_shift(shift: &mut u8, direction: Direction) {
+    let delta = match (&shift, &direction) {
+        // Handle the range boundaries, where rotation direction determines step size.
+        (7 | 135, Direction::CounterClockwise) => 1u8,
+        (7 | 135, Direction::Clockwise) => 4,
+        (119 | 247, Direction::CounterClockwise) => 4,
+        (119 | 247, Direction::Clockwise) => 1,
+        // Handle the ranges between boundaries.
+        (0..7 | 120..135 | 248.., _) => 1,
+        (8..119 | 136..247, _) => 4,
+    };
+    match direction {
+        Direction::Clockwise => *shift = shift.wrapping_add(delta),
+        Direction::CounterClockwise => *shift = shift.wrapping_sub(delta),
+    }
+    info!("phase shift: {}", shift);
 }
